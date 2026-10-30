@@ -45,6 +45,13 @@ def health_check():
 def get_users(db: Annotated[Session, Depends(get_db)]):
     return db.query(User).all()
 
+# Retrieve a single user by database ID
+@app.get("/users/{user_id}", response_model=UserResponse)
+def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
