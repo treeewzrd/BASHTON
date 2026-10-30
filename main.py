@@ -2,7 +2,7 @@
 from typing import Annotated
 
 # FastAPI
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 
 # SQLAlchemy
 # Handles database integrity violations, including unique constraint violations
@@ -52,6 +52,16 @@ def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+# Find a user by ID, return 404 if missing, otherwise delete and commit the record
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return Response(status_code=204)
 
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
