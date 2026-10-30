@@ -1,15 +1,25 @@
-# fastapi dependencies and application
-from fastapi import FastAPI, Depends, HTTPException
-# sqlalchemy database session type
-from sqlalchemy.orm import Session
-# database session factory
-from database import SessionLocal
-# sqlalchemy models
-from models import User
-# import pydantic schema used to validate incoming user creation requestss
-from schemas import UserCreate, UserResponse
+# Standard library
+from typing import Annotated
+
+# FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+
+# SQLAlchemy
 # Handles database integrity violations, including unique constraint violations
 from sqlalchemy.exc import IntegrityError
+
+# SQLAlchemy database session type
+from sqlalchemy.orm import Session
+
+# Project modules
+# Database session factory
+from database import SessionLocal
+
+# SQLAlchemy models
+from models import User
+
+# Pydantic schemas for validating and returning user data
+from schemas import UserCreate, UserResponse
 
 app = FastAPI(title="Secure API")
 
@@ -32,13 +42,13 @@ def health_check():
 
 # retrieve all users from the database
 @app.get("/users", response_model=list[UserResponse])
-def get_users(db: Session = Depends(get_db)):
+def get_users(db: Annotated[Session, Depends(get_db)]):
     return db.query(User).all()
 
 
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
-def post_users(user: UserCreate, db: Session = Depends(get_db)):
+def post_users(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
     db_user = User(username=user.username)
     db.add(db_user)
 
