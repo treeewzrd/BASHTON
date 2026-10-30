@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 # shared declarative base form database configuration
 from database import Base
 
+
 # user table definition
 class User(Base):
     __tablename__ = "users"
