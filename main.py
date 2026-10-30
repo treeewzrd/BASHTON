@@ -31,7 +31,7 @@ def health_check():
 
 
 # retrieve all users from the database
-@app.get("/users")
+@app.get("/users", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
