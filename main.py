@@ -21,6 +21,9 @@ from models import User
 # Pydantic schemas for validating and returning user data
 from schemas import UserCreate, UserResponse, UserUpdate
 
+# import password hashing function for secure password storage
+from security import hash_password
+
 app = FastAPI(title="Secure API")
 
 
@@ -66,7 +69,9 @@ def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
 def post_users(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
-    db_user = User(username=user.username)
+    db_user = User(
+        username=user.username,
+        hashed_password=hash_password(user.password))
     db.add(db_user)
 
     try:
