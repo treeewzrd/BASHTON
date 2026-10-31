@@ -15,3 +15,6 @@ class User(Base):
     
     # username: self explanatory
     username: Mapped[str] = mapped_column(String(50), unique=True)
+
+    # stores the Argon2id password hash, never the plaintext password
+    hashed_password: Mapped[str] = mapped_column(String(255))
