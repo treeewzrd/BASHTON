@@ -76,3 +76,17 @@ def post_users(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
         raise HTTPException(status_code=409, detail="Username already exists")
 
     return db_user
+
+# Update an existing user's username by ID
+@app.put("/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    user: UserCreate,
+    db: Annotated[Session, Depends(get_db)]
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db_user.username = user.username
+    db.commit()
+    return db_user
