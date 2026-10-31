@@ -12,3 +12,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     model_config = {"from_attributes": True}
+
+# Schema for incoming partial user updates
+class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=1, max_length=50)

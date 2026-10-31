@@ -19,7 +19,7 @@ from database import SessionLocal
 from models import User
 
 # Pydantic schemas for validating and returning user data
-from schemas import UserCreate, UserResponse
+from schemas import UserCreate, UserResponse, UserUpdate
 
 app = FastAPI(title="Secure API")
 
@@ -88,5 +88,25 @@ def update_user(
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     db_user.username = user.username
+    db.commit()
+    return db_user
+
+# Partially update an existing user's information by ID
+@app.patch("/users/{user_id}", response_model=UserResponse)
+def patch_user(
+    user_id: int,
+    user: UserUpdate,
+    db: Annotated[Session, Depends(get_db)]
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_data = user.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields provided")
+    if any(value is None for value in update_data.values()):
+        raise HTTPException(status_code=422, detail="Fields cannot be null")
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
     db.commit()
     return db_user
