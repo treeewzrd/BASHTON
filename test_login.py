@@ -153,3 +153,68 @@ def test_rename_requires_login(client):
     profile = client.get(f"/users/{user_id}")
     assert profile.status_code == 200
     assert profile.json()["username"] == "Sanitar"
+
+
+def test_put_cannot_rename_another_user(client):
+    sanitar = {"username": "Sanitar", "password": "example-password"}
+    reshalla = {"username": "Reshalla", "password": "another-password"}
+
+    assert client.post("/users", json=sanitar).status_code == 201
+    created = client.post("/users", json=reshalla)
+    assert created.status_code == 201
+    reshalla_id = created.json()["id"]
+
+    login = client.post("/login", json=sanitar)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/users/{reshalla_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"username": "renamed-by-sanitar", "password": "example-password"},
+    )
+
+    assert response.status_code == 403
+    profile = client.get(f"/users/{reshalla_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Reshalla" 
+
+
+def test_put_can_rename_own_account(client):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/users/{user_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"username": "Sanitar-renamed", "password": account["password"]},
+    )
+    assert response.status_code == 200
+
+    profile = client.get(f"/users/{user_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Sanitar-renamed"
+
+
+def test_put_requires_login(client):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    response = client.put(
+        f"/users/{user_id}",
+        json={"username": "changed", "password": account["password"]},
+    )
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+    profile = client.get(f"/users/{user_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Sanitar"

@@ -106,19 +106,7 @@ def post_users(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
 
     return db_user
 
-# Update an existing user's username by ID
-@app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(
-    user_id: int,
-    user: UserCreate,
-    db: Annotated[Session, Depends(get_db)]
-):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    db_user.username = user.username
-    db.commit()
-    return db_user
+
 
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
@@ -147,6 +135,21 @@ def get_current_user(
     if user is None:
         raise unauthorized
     return user
+
+# Update an existing user;s username by ID
+@app.put("/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    user: UserCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot edit another user")
+
+    current_user.username = user.username
+    db.commit() 
+    return current_user
 
 # Partially update an existing user's information by ID
 @app.patch("/users/{user_id}", response_model=UserResponse)
@@ -185,3 +188,4 @@ def login(credentials: UserLogin, db: Annotated[Session, Depends(get_db)]):
 @app.get("/me", response_model=UserResponse)
 def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
+
