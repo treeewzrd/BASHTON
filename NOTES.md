@@ -93,3 +93,27 @@
 - SQLAlchemy defines and interacts with database structures.
 - PostgreSQL enforces database constraints.
 - API validation and database constraints are separate layers.
+
+
+## 5. Login Verification
+
+- Correct username and password returned 200 with only the user's ID and username.
+- Correct username with a wrong password returned 401 ("Invalid username or password").
+- Unknown username returned the same 401 and message, so the response did not reveal whether the account exists.
+-Login tests: 3 passed 1 warning
+
+
+## 6. Authentication
+
+- Planned: after password verification, `/login` will issue a signed bearer token valid for 15 minutes.
+- The `sub` claim will identify the user by database ID. The `exp` claim will set the expiry time.
+- `GET /me` will verify the token before loading the current user's profile.
+- Verified that `create_access_token` signs the user ID and a 15-minute expiry with HS256.
+
+## 7. Expiring Access Tokens
+
+- Verified that valid login credentials return a bearer token and that both failed login cases return the same 401 response.
+- After password verification, `/login` will issue a signed bearer token valid for 15 minutes.
+- Verified that GET /me returns the signed-in user's ID and username with a valid login token and returns 401 when the token is missing.
+- Verified that GET /me returns 401 for an expired token and for a token signed with the wrong key, even when each token names an existing user.
+- Test result: all 6 login and bearer-token cases passed using temporary SQLite databases.

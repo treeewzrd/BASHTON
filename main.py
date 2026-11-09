@@ -1,8 +1,14 @@
+import os
+
 # Standard library
 from typing import Annotated
 
+import jwt
+
 # FastAPI
 from fastapi import Depends, FastAPI, HTTPException, Response
+
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # SQLAlchemy
 # Handles database integrity violations, including unique constraint violations
@@ -19,12 +25,15 @@ from database import SessionLocal
 from models import User
 
 # Pydantic schemas for validating and returning user data
-from schemas import UserCreate, UserResponse, UserUpdate
+from schemas import TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate
 
 # import password hashing function for secure password storage
-from security import hash_password
+from security import create_access_token, hash_password, verify_password
+
+JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 
 app = FastAPI(title="Secure API")
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # provides database session for each request
@@ -42,7 +51,22 @@ def get_db():
 def health_check():
     return {"status": "ok"}
 
+def test_me_requires_login_and_returns_owns_profile(client):
+    denied = client.get("/me")
+    assert denied.status_code == 401
+    assert denied.headers["www-authenticate"] == "Bearer"
 
+    account = {"username": "alice", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+
+    token = login.json()["access_token"]
+    profile = client.get("/me", headers={"Authorization": f"Bearer{token}"})
+    assert profile.status_code == 200
+    assert profile.json() == {"id": created.json()["id"], "username": "alice"}
+    
 # retrieve all users from the database
 @app.get("/users", response_model=list[UserResponse])
 def get_users(db: Annotated[Session, Depends(get_db)]):
@@ -115,3 +139,44 @@ def patch_user(
         setattr(db_user, key, value)
     db.commit()
     return db_user
+
+
+@app.post("/login", response_model=TokenResponse)
+def login(credentials: UserLogin, db: Annotated[Session, Depends(get_db)]):
+    user = db.query(User).filter(User.username == credentials.username).first()
+
+    if user is None or not verify_password(credentials.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_access_token(user.id, JWT_SECRET_KEY)
+    return TokenResponse(access_token=token, token_type="bearer")
+
+
+@app.get("/me", response_model=UserResponse)
+def get_me(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    unauthorized = HTTPException(
+        status_code=401,
+        detail="Invalid or expired access token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None:
+        raise unauthorized
+
+    try:
+        claims = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET_KEY,
+            algorithms=["HS256"],
+            options={"require": ["sub", "exp"]},
+        )
+        user_id = int(claims["sub"])
+    except (jwt.InvalidTokenError, ValueError):
+        raise unauthorized from None
+
+    user = db.get(User, user_id)
+    if user is None:
+        raise unauthorized
+    return user
