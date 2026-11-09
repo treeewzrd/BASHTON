@@ -56,17 +56,17 @@ def test_me_requires_login_and_returns_owns_profile(client):
     assert denied.status_code == 401
     assert denied.headers["www-authenticate"] == "Bearer"
 
-    account = {"username": "alice", "password": "example-password"}
+    account = {"username": "Sanitar", "password": "example-password"}
     created = client.post("/users", json=account)
     assert created.status_code == 201
     login = client.post("/login", json=account)
     assert login.status_code == 200
 
     token = login.json()["access_token"]
-    profile = client.get("/me", headers={"Authorization": f"Bearer{token}"})
+    profile = client.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert profile.status_code == 200
-    assert profile.json() == {"id": created.json()["id"], "username": "alice"}
-    
+    assert profile.json() == {"id": created.json()["id"], "username": "Sanitar"}
+
 # retrieve all users from the database
 @app.get("/users", response_model=list[UserResponse])
 def get_users(db: Annotated[Session, Depends(get_db)]):
@@ -120,40 +120,7 @@ def update_user(
     db.commit()
     return db_user
 
-# Partially update an existing user's information by ID
-@app.patch("/users/{user_id}", response_model=UserResponse)
-def patch_user(
-    user_id: int,
-    user: UserUpdate,
-    db: Annotated[Session, Depends(get_db)]
-):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    update_data = user.model_dump(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields provided")
-    if any(value is None for value in update_data.values()):
-        raise HTTPException(status_code=422, detail="Fields cannot be null")
-    for key, value in update_data.items():
-        setattr(db_user, key, value)
-    db.commit()
-    return db_user
-
-
-@app.post("/login", response_model=TokenResponse)
-def login(credentials: UserLogin, db: Annotated[Session, Depends(get_db)]):
-    user = db.query(User).filter(User.username == credentials.username).first()
-
-    if user is None or not verify_password(credentials.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-
-    token = create_access_token(user.id, JWT_SECRET_KEY)
-    return TokenResponse(access_token=token, token_type="bearer")
-
-
-@app.get("/me", response_model=UserResponse)
-def get_me(
+def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -180,3 +147,41 @@ def get_me(
     if user is None:
         raise unauthorized
     return user
+
+# Partially update an existing user's information by ID
+@app.patch("/users/{user_id}", response_model=UserResponse)
+def patch_user(
+    user_id: int,
+    user: UserUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot edit another user")
+
+    db_user = current_user
+    update_data = user.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields provided")
+    if any(value is None for value in update_data.values()):
+        raise HTTPException(status_code=422, detail="Fields cannot be null")
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+    db.commit()
+    return db_user
+
+
+@app.post("/login", response_model=TokenResponse)
+def login(credentials: UserLogin, db: Annotated[Session, Depends(get_db)]):
+    user = db.query(User).filter(User.username == credentials.username).first()
+
+    if user is None or not verify_password(credentials.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_access_token(user.id, JWT_SECRET_KEY)
+    return TokenResponse(access_token=token, token_type="bearer")
+
+
+@app.get("/me", response_model=UserResponse)
+def get_me(current_user: Annotated[User, Depends(get_current_user)]):
+    return current_user

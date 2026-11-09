@@ -32,13 +32,13 @@ def client(tmp_path):
 @pytest.mark.parametrize(
     "username,password,expected",
     [
-        ("alice", "example-password", 200),
-        ("alice", "wrong-password", 401),
+        ("Sanitar", "example-password", 200),
+        ("Sanitar", "wrong-password", 401),
         ("unknown", "example-password", 401),
     ],
 )
 def test_login(client, username, password, expected):
-    account = {"username": "alice", "password": "example-password"}
+    account = {"username": "Sanitar", "password": "example-password"}
     created = client.post("/users", json=account)
     assert created.status_code == 201
 
@@ -59,7 +59,7 @@ def test_me_requires_login_and_returns_owns_profile(client):
     assert denied.status_code == 401
     assert denied.headers["www-authenticate"] == "Bearer"
 
-    account = {"username": "alice", "password": "example-password"}
+    account = {"username": "Sanitar", "password": "example-password"}
     created = client.post("/users", json=account)
     assert created.status_code == 201
     login = client.post("/login", json=account)
@@ -68,7 +68,7 @@ def test_me_requires_login_and_returns_owns_profile(client):
     token = login.json()["access_token"]
     profile = client.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert profile.status_code == 200
-    assert profile.json() == {"id": created.json()["id"], "username": "alice"}
+    assert profile.json() == {"id": created.json()["id"], "username": "Sanitar"}
 
 
 @pytest.mark.parametrize("case", ["expired", "wrong_key"])
@@ -76,7 +76,7 @@ def test_me_rejects_invalid_token(client, monkeypatch, case):
     server_key = "test-server-signing-key-for-this-test-only"
     monkeypatch.setattr("main.JWT_SECRET_KEY", server_key)
 
-    account = {"username": "alice", "password": "example-password"}
+    account = {"username": "Sanitar", "password": "example-password"}
     created = client.post("/users", json=account)
     assert created.status_code == 201
 
@@ -91,3 +91,65 @@ def test_me_rejects_invalid_token(client, monkeypatch, case):
     response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_user_cannot_rename_another_user(client):
+    sanitar = {"username": "Sanitar", "password": "example-password"}
+    reshalla = {"username": "Reshalla", "password": "another-password"}
+
+    assert client.post("/users", json=sanitar).status_code == 201
+    created = client.post("/users", json=reshalla)
+    assert created.status_code == 201
+    reshalla_id = created.json()["id"]
+
+    login = client.post("/login", json=sanitar)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/users/{reshalla_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"username": "renamed-by-sanitar"},
+    )
+
+    assert response.status_code == 403
+    profile = client.get(f"/users/{reshalla_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Reshalla"
+
+
+def test_user_can_rename_own_account(client):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/users/{user_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"username": "Sanitar-renamed"},
+    )
+    assert response.status_code == 200
+
+    profile = client.get(f"/users/{user_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Sanitar-renamed"
+
+
+def test_rename_requires_login(client):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    response = client.patch(f"/users/{user_id}", json={"username": "changed"})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+    profile = client.get(f"/users/{user_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Sanitar"
