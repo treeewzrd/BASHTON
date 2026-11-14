@@ -51,35 +51,6 @@ def get_db():
 def health_check():
     return {"status": "ok"}
 
-def test_me_requires_login_and_returns_owns_profile(client):
-    denied = client.get("/me")
-    assert denied.status_code == 401
-    assert denied.headers["www-authenticate"] == "Bearer"
-
-    account = {"username": "Sanitar", "password": "example-password"}
-    created = client.post("/users", json=account)
-    assert created.status_code == 201
-    login = client.post("/login", json=account)
-    assert login.status_code == 200
-
-    token = login.json()["access_token"]
-    profile = client.get("/me", headers={"Authorization": f"Bearer {token}"})
-    assert profile.status_code == 200
-    assert profile.json() == {"id": created.json()["id"], "username": "Sanitar"}
-
-# retrieve all users from the database
-@app.get("/users", response_model=list[UserResponse])
-def get_users(db: Annotated[Session, Depends(get_db)]):
-    return db.query(User).all()
-
-# Retrieve a single user by database ID
-@app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
-
 
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
@@ -98,7 +69,7 @@ def post_users(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
     return db_user
 
 
-
+# Verify the signature, expiration, and required claims using HS256.
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[Session, Depends(get_db)],
@@ -121,7 +92,7 @@ def get_current_user(
         user_id = int(claims["sub"])
     except (jwt.InvalidTokenError, ValueError):
         raise unauthorized from None
-
+    # Look up the account on every request so deleted users cannot authenticate.
     user = db.get(User, user_id)
     if user is None:
         raise unauthorized
@@ -141,6 +112,24 @@ def delete_user(
     db.delete(current_user)
     db.commit()
     return Response(status_code=204)
+
+# Require login and return only the signed-in account.
+@app.get("/users", response_model=list[UserResponse])
+def get_users(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return [current_user]
+
+
+# Require login and ownership before reading an account.
+@app.get("/users/{user_id}", response_model=UserResponse)
+def get_user(
+    user_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot view another user")
+    return current_user
 
 
 # Update an existing user;s username by ID
@@ -178,6 +167,7 @@ def patch_user(
         raise HTTPException(status_code=403, detail="Cannot edit another user")
 
     db_user = current_user
+    # Update only explicitly supplied fields; reject empty updates and explicit nulls below.
     update_data = user.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided")
@@ -190,6 +180,7 @@ def patch_user(
     try:
         db.commit()
     except IntegrityError:
+        # Reset the failed transaction before returning the username conflict.
         db.rollback()
         raise HTTPException(
             status_code=409,

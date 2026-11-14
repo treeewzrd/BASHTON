@@ -6,6 +6,10 @@ I built BASHTON so I could put my own security decisions to the test. Writing th
 
 `POST /login` returns the same error for an unknown username and an incorrect password. `GET /me` requires a valid bearer token and returns the signed-in user’s ID and username. `PATCH /users/{user_id}` and `PUT /users/{user_id}` both require a valid bearer token and allow the signed-in user to rename only their own account.
 
+DELETE /users/{user_id} requires a valid bearer token and allows users to delete only their own account. Successful deletion returns 204 with no response body. Once deleted, the account can no longer authenticate using its existing access token.
+
+PostgreSQL integration and installation in a fresh environment have not yet been verified. Passing the SQLite-based tests does not establish public deployment readiness.
+
 The test suite covers password hashing, successful and failed logins, and profile requests with missing, expired, or incorrectly signed tokens. The login and profile tests use temporary SQLite databases.
 
 ## Local setup
