@@ -7,3 +7,44 @@ I built BASHTON so I could put my own security decisions to the test. Writing th
 `POST /login` returns the same error for an unknown username and an incorrect password. `GET /me` requires a valid bearer token and returns the signed-in user’s ID and username. `PATCH /users/{user_id}` and `PUT /users/{user_id}` both require a valid bearer token and allow the signed-in user to rename only their own account.
 
 The test suite covers password hashing, successful and failed logins, and profile requests with missing, expired, or incorrectly signed tokens. The login and profile tests use temporary SQLite databases.
+
+## Local setup
+
+Requires Python 3.12 and PostgreSQL.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+```
+
+Create a PostgreSQL database and application user. Update `.env` with their connection details.
+
+Generate a signing secret:
+
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+```
+
+Use the generated value for `JWT_SECRET_KEY` in `.env`. Never commit `.env`.
+
+Initialize tables in the configured development database:
+
+```bash
+python -c 'from database import Base, engine; import models; Base.metadata.create_all(engine)'
+```
+
+Start the API:
+
+```bash
+uvicorn main:app --reload
+```
+
+Open http://127.0.0.1:8000/docs for interactive API documentation.
+
+Run the tests:
+
+```bash
+python -m pytest -q
+```
