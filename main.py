@@ -147,7 +147,7 @@ def delete_user(
 @app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(
     user_id: int,
-    user: UserCreate,
+    user: UserRename,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):

@@ -193,9 +193,9 @@ def test_put_can_rename_own_account(client):
     response = client.put(
         f"/users/{user_id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"username": "Sanitar-renamed", "password": account["password"]},
+        json={"username": "Sanitar-renamed"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.json()
 
     profile = client.get(f"/users/{user_id}")
     assert profile.status_code == 200
@@ -342,3 +342,37 @@ def test_duplicate_username_returns_conflict(client, method):
     assert response.json() == {"detail": "Username already exists"}
 
     profile = client.get("/me", headers=headers)
+
+
+@pytest.mark.parametrize("token", ["feet", "y.u.p", ""])
+def test_me_rejects_malformed_tokens(client, token):
+    response = client.get(
+        "/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize("missing_claim", ["sub", "exp"])
+def test_me_rejects_missing_token_claims(client, monkeypatch, missing_claim):
+    signing_key = "test-only-signing-key-at-least-32-characters"
+    monkeypatch.setattr("main.JWT_SECRET_KEY", signing_key)
+
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+
+    claims = {
+        "sub": str(created.json()["id"]),
+        "exp": int(time()) + 900,
+    }
+    del claims[missing_claim]
+    token = jwt.encode(claims, signing_key, algorithm="HS256")
+
+    response = client.get(
+        "/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
