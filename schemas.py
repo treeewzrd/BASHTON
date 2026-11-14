@@ -29,3 +29,7 @@ class UserLogin(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+
+
+class UserRename(BaseModel):
+    username: str = Field(min_length=1, max_length=50)

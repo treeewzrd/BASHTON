@@ -25,7 +25,7 @@ from database import SessionLocal
 from models import User
 
 # Pydantic schemas for validating and returning user data
-from schemas import TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate
+from schemas import TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate, UserRename
 
 # import password hashing function for secure password storage
 from security import create_access_token, hash_password, verify_password
@@ -80,15 +80,6 @@ def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-# Find a user by ID, return 404 if missing, otherwise delete and commit the record
-@app.delete("/users/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    db.delete(user)
-    db.commit()
-    return Response(status_code=204)
 
 # Validate incoming user data, create the database record, and return it
 @app.post("/users", response_model=UserResponse, status_code=201)
@@ -136,6 +127,22 @@ def get_current_user(
         raise unauthorized
     return user
 
+
+# Require login and ownership before deleting account
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete another user")
+
+    db.delete(current_user)
+    db.commit()
+    return Response(status_code=204)
+
+
 # Update an existing user;s username by ID
 @app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(
@@ -148,7 +155,15 @@ def update_user(
         raise HTTPException(status_code=403, detail="Cannot edit another user")
 
     current_user.username = user.username
-    db.commit() 
+    try:
+        db.commit() 
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Username already exists",
+        ) from None
+
     return current_user
 
 # Partially update an existing user's information by ID
@@ -168,9 +183,20 @@ def patch_user(
         raise HTTPException(status_code=400, detail="No fields provided")
     if any(value is None for value in update_data.values()):
         raise HTTPException(status_code=422, detail="Fields cannot be null")
+    
     for key, value in update_data.items():
         setattr(db_user, key, value)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Username already exists",
+        ) from None
+
+    
     return db_user
 
 

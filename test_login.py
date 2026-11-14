@@ -218,3 +218,127 @@ def test_put_requires_login(client):
     profile = client.get(f"/users/{user_id}")
     assert profile.status_code == 200
     assert profile.json()["username"] == "Sanitar"
+
+
+def test_delete_cannot_remove_another_user(client):
+    sanitar = {"username": "Sanitar", "password": "example-password"}
+    reshalla = {"username": "Reshalla", "password": "another-password"}
+
+    assert client.post("/users", json=sanitar).status_code == 201
+    created = client.post("/users", json=reshalla)
+    assert created.status_code == 201
+    reshalla_id = created.json()["id"]
+
+    login = client.post("/login", json=sanitar)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.delete(
+        f"/users/{reshalla_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+    profile = client.get(f"/users/{reshalla_id}")
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Reshalla"
+
+
+def test_delete_can_remove_own_account(client):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.delete(
+       f"/users/{user_id}",
+       headers={"Authorization": f"Bearer {token}"}, 
+    )
+    assert response.status_code == 204
+    assert response.content == b""
+
+    profile = client.get(f"/users/{user_id}")
+    assert profile.status_code == 404
+    assert profile.json() == {"detail": "User not found"}
+    # D3leted acocunt must no longer authenticate with existing token
+    denied = client.get(
+        "/me",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert denied.status_code == 401
+
+
+    def test_delete_requires(client):
+        account = {"username": "Sanitar", "password": "example-password"}
+        created = client.post("/users", json=account)
+        assert created.status_code == 201
+        user_id = created.json()["is"]
+
+        response = client.delete(f"/users/{user_id}")
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
+
+        # Confirm the rejected deletion left the account intact
+        login = client.post("/login", json=account)
+        assert login.status_code == 200
+
+
+@pytest.mark.parametrize("method", ["put", "patch"])
+def test_duplicate_username_returns_conflict(client, method):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    other = client.post(
+        "users/",
+        json={"username": "Reshalla", "password": "another-password"},
+    )
+    assert other.status_code == 201
+
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = getattr(client, method)(
+        f"/users/{user_id}",
+        headers=headers,
+        json={"username": "Reshalla"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Username already exists"}
+
+    profile = client.get("/me", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json()["username"] == "Sanitar"
+
+@pytest.mark.parametrize("method", ["put", "patch"])
+def test_duplicate_username_returns_conflict(client, method):
+    account = {"username": "Sanitar", "password": "example-password"}
+    created = client.post("/users", json=account)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    other = client.post(
+        "users/",
+        json={"username": "Reshalla", "password": "another-password"},
+    )
+    assert other.status_code == 201
+
+    login = client.post("/login", json=account)
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = getattr(client, method)(
+        f"/users/{user_id}",
+        headers=headers,
+        json={"username": "Reshalla", "password": account["password"]},
+    )
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Username already exists"}
+
+    profile = client.get("/me", headers=headers)
