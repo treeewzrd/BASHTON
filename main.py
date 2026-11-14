@@ -32,7 +32,7 @@ from security import create_access_token, hash_password, verify_password
 
 JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 
-app = FastAPI(title="Secure API")
+app = FastAPI(title="BASHTON")
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -205,4 +205,3 @@ def login(credentials: UserLogin, db: Annotated[Session, Depends(get_db)]):
 @app.get("/me", response_model=UserResponse)
 def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
-

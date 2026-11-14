@@ -49,6 +49,14 @@ Requests targeting another account return 403. Successful deletion returns 204 w
 - An explicit null username in PATCH returns 422.
 - Invalid username lengths return 422.
 
+## Screenshots
+
+### BASHTON API Overview
+![BASHTON API overview](docs/images/bashton-api-docs.png)
+
+### Automated Tests
+![GitHub Actions showing 40 passing tests](docs/images/bashton-tests-passing.png)
+
 ## Tools used
 
 | Tool | Role in the project |
@@ -188,4 +196,4 @@ The remaining API scenarios are tested against SQLite. The complete manual Postg
 
 ## Development notes
 
-To be added — compiling notes.
+To be added — compiling notes, really chaotic right now.
