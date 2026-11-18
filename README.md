@@ -194,6 +194,6 @@ The remaining API scenarios are tested against SQLite. The complete manual Postg
 | `test_postgresql.py` | PostgreSQL integration tests |
 | `.github/workflows/tests.yml` | Public automated test workflow |
 
-## Development notes
+## Used in Tushonka
 
-To be added — compiling notes, really chaotic right now.
+I adapted BASHTON’s authentication and database foundation into an independent backend for [Tushonka](https://github.com/treeewzrd/Tushonka), my deployed Escape from Tarkov encounter tracker. Tushonka adds account-owned encounter records, reporting endpoints, and a browser interface.
